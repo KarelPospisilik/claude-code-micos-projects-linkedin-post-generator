@@ -700,7 +700,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
             <Card>
               <SectionLabel num={1} text="Obrázek" />
               <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
-                AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků — vyber jeden pro LinkedIn.
+                AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků.
               </div>
 
               <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
