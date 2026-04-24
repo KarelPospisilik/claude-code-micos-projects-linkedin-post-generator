@@ -501,7 +501,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
             Archiv příspěvků
           </div>
           <div style={{ fontSize: "12px", color: MID, marginTop: "4px" }}>
-            {profile?.name} · {archive.length} {archive.length === 1 ? "příspěvek" : archive.length < 5 ? "příspěvky" : "příspěvků"}
+            Počet příspěvků: {archive.length}
           </div>
         </div>
         <SecondaryBtn onClick={() => setShowArchive(false)}>← Zpět</SecondaryBtn>
