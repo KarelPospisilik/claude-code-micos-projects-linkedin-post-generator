@@ -398,6 +398,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          author_id: profile?.id,
           author_name: profile?.name,
           author_role: profile?.role,
           topic: selectedTopic?.title,
