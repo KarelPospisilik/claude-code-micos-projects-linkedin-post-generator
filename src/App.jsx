@@ -721,7 +721,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
                 <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
-                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vytvořit nové obrázky"}
+                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vygenerovat nové obrázky"}
                 </PrimaryBtn>
               </div>
 
