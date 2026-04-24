@@ -719,20 +719,9 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 onBlur={e => e.target.style.borderColor = BORDER}
               />
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginBottom: "20px" }}>
-                {imageOptions.length > 0 && (
-                  <button onClick={generateImage} disabled={loadingImage} style={{
-                    background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
-                    padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
-                    fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
-                    cursor: loadingImage ? "not-allowed" : "pointer", fontFamily: FONT,
-                    opacity: loadingImage ? 0.5 : 1, display: "inline-flex", alignItems: "center",
-                  }}>
-                    {loadingImage ? <><Spinner />Generuji...</> : "↺ Vytvořit nové obrázky"}
-                  </button>
-                )}
-                <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage && imageOptions.length === 0}>
-                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Generovat znovu"}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
+                <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
+                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vytvořit nové obrázky"}
                 </PrimaryBtn>
               </div>
 
