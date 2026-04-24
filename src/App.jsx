@@ -781,11 +781,6 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                       );
                     })}
                   </div>
-                  {selectedImageUrl && (
-                    <div style={{ fontSize: "11px", color: MID, marginTop: "10px" }}>
-                      Vybraný obrázek bude odeslán spolu s příspěvkem na LinkedIn.
-                    </div>
-                  )}
                 </>
               )}
             </Card>
