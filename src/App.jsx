@@ -661,9 +661,9 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
               </div>
             </Card>
 
-            <div style={{ display: "flex", gap: "12px", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "space-between", alignItems: "center" }}>
               <SecondaryBtn onClick={() => setStep(topicMode === "ai" ? 3 : 2)}>← Zpět</SecondaryBtn>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "nowrap" }}>
                 <button onClick={() => generatePost()} disabled={loadingPost} style={{
                   background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
                   padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
