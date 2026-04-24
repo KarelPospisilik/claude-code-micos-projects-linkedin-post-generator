@@ -20,6 +20,27 @@ const PROFILES = [
   { id: "karel",  name: "Karel Pospíšilík", role: "Marketing, PLP Czech Republic",  styleExamples: "" },
 ];
 
+// === ARCHIV – localStorage helpers ===
+const archiveKey = (profileId) => `plp_archive_${profileId}`;
+
+const loadArchiveFromStorage = (profileId) => {
+  try {
+    return JSON.parse(localStorage.getItem(archiveKey(profileId)) || "[]");
+  } catch { return []; }
+};
+
+const persistArchive = (profileId, entries) => {
+  localStorage.setItem(archiveKey(profileId), JSON.stringify(entries));
+};
+
+const formatDate = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("cs-CZ", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+};
+
 // === POMOCNÉ KOMPONENTY ===
 const SectionLabel = ({ num, text }) => (
   <div style={{ display: "flex", alignItems: "center", gap: "10px",
@@ -202,10 +223,15 @@ export default function LinkedInPostGenerator() {
 
   // Krok 5 – obrázek
   const [imagePrompt, setImagePrompt] = useState("");
-  const [imageOptions, setImageOptions] = useState([]); // 3 návrhy URL
+  const [imageOptions, setImageOptions] = useState([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [loadingImage, setLoadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
+
+  // Archiv
+  const [archive, setArchive] = useState([]);
+  const [showArchive, setShowArchive] = useState(false);
+  const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
   const profile = PROFILES.find(p => p.id === selectedProfileId) || null;
   const step2Valid = topicMode === "ai" || (topicMode === "custom" && customTopic.trim().length > 0);
@@ -224,6 +250,7 @@ export default function LinkedInPostGenerator() {
       const data = await res.json();
       if (data.ok) {
         setSelectedProfileId(data.profileId);
+        setArchive(loadArchiveFromStorage(data.profileId));
         setStep(2);
       } else {
         setLoginError(data.error || "Nesprávný email nebo heslo.");
@@ -249,6 +276,12 @@ export default function LinkedInPostGenerator() {
       "data-driven": "data-driven, faktický",
     };
 
+    // Témata z archivu → vyloučit z nových návrhů
+    const usedTopics = archive.map(e => e.topic).filter(Boolean);
+    const exclusionSection = usedTopics.length > 0
+      ? `\nTato témata již byla použita v minulých příspěvcích – VYHNI se jim a nepředkládej podobná:\n${usedTopics.map(t => `- ${t}`).join("\n")}`
+      : "";
+
     const prompt = `Jsi expert na LinkedIn obsah v oboru telekomunikační infrastruktury a FTTx sítí.
 Vygeneruj 5 silných nápadů na LinkedIn příspěvky pro:
 - Jméno: ${profile.name}
@@ -259,7 +292,7 @@ Vygeneruj 5 silných nápadů na LinkedIn příspěvky pro:
 Každý nápad musí být autentický, hodnotný a konkrétní.
 
 Pro pole "description" napiš 1-2 věty v druhé osobě, jako by agent oslovoval autora a představoval mu téma.
-Začni slovesem v přítomném čase. Příklady stylu: "Sdílíš zkušenost z...", "Otevřeš diskuzi o...", "Ukážeš, jak...", "Představíš pohled na...".
+Začni slovesem v přítomném čase. Příklady stylu: "Sdílíš zkušenost z...", "Otevřeš diskuzi o...", "Ukážeš, jak...", "Představíš pohled na...".${exclusionSection}
 Vrať POUZE JSON pole bez markdown:
 [{"id": 1, "title": "Název tématu", "description": "Sdílíš... / Otevřeš... / Ukážeš..."}, ...]`;
 
@@ -390,7 +423,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     }
   };
 
-  // === ODESLÁNÍ NA MAKE ===
+  // === ODESLÁNÍ NA MAKE + ULOŽENÍ DO ARCHIVU ===
   const sendToMake = async () => {
     setSendStatus("sending");
     try {
@@ -408,14 +441,37 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
           timestamp: new Date().toISOString(),
         }),
       });
+
+      // Uložit do archivu
+      const entry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        sentAt: new Date().toISOString(),
+        topic: selectedTopic?.title || "",
+        post_text: post,
+        image_url: selectedImageUrl || "",
+        language,
+      };
+      const updated = [entry, ...archive];
+      setArchive(updated);
+      persistArchive(selectedProfileId, updated);
+
       setSendStatus("ok");
     } catch {
       setSendStatus("error");
     }
   };
 
+  // === SMAZAT Z ARCHIVU ===
+  const deleteFromArchive = (id) => {
+    const updated = archive.filter(e => e.id !== id);
+    setArchive(updated);
+    persistArchive(selectedProfileId, updated);
+    if (expandedArchiveId === id) setExpandedArchiveId(null);
+  };
+
   const reset = () => {
     setStep(1);
+    setShowArchive(false);
     setLoginEmail("");
     setLoginPassword("");
     setLoginError("");
@@ -430,7 +486,124 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setSelectedImageUrl("");
     setImagePrompt("");
     setImageError("");
+    setArchive([]);
+    setExpandedArchiveId(null);
   };
+
+  // === ARCHIV PANEL ===
+  const ArchivePanel = () => (
+    <div style={{ maxWidth: "740px", margin: "0 auto", padding: "28px 20px 60px" }}>
+      {/* Hlavička panelu */}
+      <div style={{ display: "flex", justifyContent: "space-between",
+        alignItems: "flex-start", marginBottom: "24px" }}>
+        <div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: BLUE, letterSpacing: "-0.3px" }}>
+            Archiv příspěvků
+          </div>
+          <div style={{ fontSize: "12px", color: MID, marginTop: "4px" }}>
+            {profile?.name} · {archive.length} {archive.length === 1 ? "příspěvek" : archive.length < 5 ? "příspěvky" : "příspěvků"}
+          </div>
+        </div>
+        <SecondaryBtn onClick={() => setShowArchive(false)}>← Zpět</SecondaryBtn>
+      </div>
+
+      {/* Prázdný stav */}
+      {archive.length === 0 && (
+        <Card>
+          <div style={{ textAlign: "center", padding: "40px 20px", color: MID }}>
+            <div style={{ fontSize: "36px", marginBottom: "12px" }}>📂</div>
+            <div style={{ fontWeight: "700", fontSize: "15px", color: DARK, marginBottom: "8px" }}>
+              Zatím žádné příspěvky
+            </div>
+            <div style={{ fontSize: "13px" }}>
+              Odeslaný příspěvek se automaticky uloží zde.
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Záznamy */}
+      {archive.map(entry => {
+        const expanded = expandedArchiveId === entry.id;
+        const longText = entry.post_text.length > 220;
+        const previewText = longText && !expanded
+          ? entry.post_text.slice(0, 220) + "…"
+          : entry.post_text;
+
+        return (
+          <Card key={entry.id} style={{ marginBottom: "16px" }}>
+            {/* Datum + jazyk */}
+            <div style={{ fontSize: "11px", color: MID, marginBottom: "8px",
+              letterSpacing: "0.5px" }}>
+              {formatDate(entry.sentAt)}&nbsp;&nbsp;·&nbsp;&nbsp;
+              {entry.language === "cs" ? "🇨🇿 Čeština" : "🇬🇧 Angličtina"}
+            </div>
+
+            {/* Téma */}
+            <div style={{ fontWeight: "800", fontSize: "15px", color: BLUE,
+              marginBottom: "14px", lineHeight: "1.4" }}>
+              {entry.topic || "—"}
+            </div>
+
+            {/* Text + obrázek */}
+            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", color: DARK, lineHeight: "1.8",
+                  whiteSpace: "pre-wrap" }}>
+                  {previewText}
+                </div>
+                {longText && (
+                  <button
+                    onClick={() => setExpandedArchiveId(expanded ? null : entry.id)}
+                    style={{
+                      background: "none", border: "none", color: BLUE,
+                      fontSize: "12px", fontWeight: "700", cursor: "pointer",
+                      padding: "6px 0 0 0", fontFamily: FONT,
+                    }}>
+                    {expanded ? "▲ Skrýt" : "▼ Zobrazit celý text"}
+                  </button>
+                )}
+              </div>
+
+              {entry.image_url && (
+                <a href={entry.image_url} target="_blank" rel="noreferrer"
+                  style={{ flexShrink: 0 }}>
+                  <img
+                    src={entry.image_url}
+                    alt="Obrázek příspěvku"
+                    style={{
+                      width: "110px", height: "110px", objectFit: "cover",
+                      borderRadius: "6px", border: `1px solid ${BORDER}`,
+                      display: "block",
+                    }}
+                  />
+                </a>
+              )}
+            </div>
+
+            {/* Akce */}
+            <div style={{ display: "flex", justifyContent: "flex-end",
+              marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${BORDER}` }}>
+              <button
+                onClick={() => {
+                  if (window.confirm("Opravdu chceš tento příspěvek odstranit z archivu?")) {
+                    deleteFromArchive(entry.id);
+                  }
+                }}
+                style={{
+                  background: "none", border: `1px solid #FCA5A5`, color: "#DC2626",
+                  padding: "5px 16px", borderRadius: "4px", fontSize: "12px",
+                  fontWeight: "700", cursor: "pointer", fontFamily: FONT,
+                  textTransform: "uppercase", letterSpacing: "1px",
+                }}>
+                Odstranit
+              </button>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: LIGHT_BG, fontFamily: FONT, color: DARK }}>
@@ -446,12 +619,33 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
           </span>
         </div>
         {step > 1 && (
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", paddingRight: "32px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingRight: "24px" }}>
             {profile && (
               <span style={{ color: WHITE, fontSize: "13px", opacity: 0.85 }}>
                 {profile.name}
               </span>
             )}
+            <button
+              onClick={() => { setShowArchive(v => !v); setExpandedArchiveId(null); }}
+              style={{
+                background: showArchive ? `${WHITE}22` : "transparent",
+                border: `1px solid ${WHITE}60`,
+                color: WHITE, padding: "4px 14px", borderRadius: "4px",
+                fontSize: "11px", letterSpacing: "1px", cursor: "pointer",
+                textTransform: "uppercase", fontFamily: FONT,
+                display: "flex", alignItems: "center", gap: "6px",
+              }}>
+              📂 Archiv příspěvků
+              {archive.length > 0 && (
+                <span style={{
+                  background: RED, color: WHITE, borderRadius: "10px",
+                  fontSize: "10px", fontWeight: "800", padding: "1px 6px",
+                  lineHeight: "1.6",
+                }}>
+                  {archive.length}
+                </span>
+              )}
+            </button>
             <button onClick={reset} style={{
               background: "transparent", border: `1px solid ${WHITE}40`,
               color: WHITE, padding: "4px 14px", borderRadius: "4px",
@@ -462,422 +656,427 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
         )}
       </div>
 
-      {/* STEP BAR */}
-      <StepBar current={step} topicMode={topicMode} />
+      {/* STEP BAR – skrytý při zobrazení archivu */}
+      {!showArchive && <StepBar current={step} topicMode={topicMode} />}
+
+      {/* ARCHIV */}
+      {showArchive && <ArchivePanel />}
 
       {/* CONTENT */}
-      <div style={{ maxWidth: "740px", margin: "0 auto", padding: "28px 20px 60px" }}>
+      {!showArchive && (
+        <div style={{ maxWidth: "740px", margin: "0 auto", padding: "28px 20px 60px" }}>
 
-        {/* ===== KROK 1 – PŘIHLÁŠENÍ ===== */}
-        {step === 1 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Přihlášení" />
-              <InputField
-                label="Email"
-                type="email"
-                value={loginEmail}
-                onChange={setLoginEmail}
-                placeholder="vas@email.cz"
-                autoFocus
-                onKeyDown={e => e.key === "Enter" && !loginLoading && handleLogin()}
-              />
-              <InputField
-                label="Heslo"
-                type="password"
-                value={loginPassword}
-                onChange={setLoginPassword}
-                placeholder="••••••••"
-                onKeyDown={e => e.key === "Enter" && !loginLoading && handleLogin()}
-              />
-              {loginError && (
-                <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
-                  borderRadius: "6px", padding: "10px 14px", fontSize: "13px",
-                  color: "#DC2626", marginTop: "4px" }}>
-                  {loginError}
-                </div>
-              )}
-            </Card>
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <PrimaryBtn
-                onClick={handleLogin}
-                disabled={!loginEmail.trim() || !loginPassword}
-                loading={loginLoading}
-              >
-                Přihlásit se →
-              </PrimaryBtn>
-            </div>
-          </>
-        )}
-
-        {/* ===== KROK 2 – KONTEXT ===== */}
-        {step === 2 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Styl" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
-                <SelectField label="Jazyk" value={language} onChange={setLanguage}
-                  options={[
-                    { value: "cs", label: "🇨🇿 Čeština" },
-                    { value: "en", label: "🇬🇧 Angličtina" },
-                  ]} />
-                <SelectField label="Tón" value={tone} onChange={setTone}
-                  options={[
-                    { value: "insightful", label: "Insightful – odborný" },
-                    { value: "storytelling", label: "Storytelling – příběh" },
-                    { value: "casual", label: "Casual – přátelský" },
-                    { value: "data-driven", label: "Data-driven – faktický" },
-                  ]} />
+          {/* ===== KROK 1 – PŘIHLÁŠENÍ ===== */}
+          {step === 1 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Přihlášení" />
+                <InputField
+                  label="Email"
+                  type="email"
+                  value={loginEmail}
+                  onChange={setLoginEmail}
+                  placeholder="vas@email.cz"
+                  autoFocus
+                  onKeyDown={e => e.key === "Enter" && !loginLoading && handleLogin()}
+                />
+                <InputField
+                  label="Heslo"
+                  type="password"
+                  value={loginPassword}
+                  onChange={setLoginPassword}
+                  placeholder="••••••••"
+                  onKeyDown={e => e.key === "Enter" && !loginLoading && handleLogin()}
+                />
+                {loginError && (
+                  <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
+                    borderRadius: "6px", padding: "10px 14px", fontSize: "13px",
+                    color: "#DC2626", marginTop: "4px" }}>
+                    {loginError}
+                  </div>
+                )}
+              </Card>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <PrimaryBtn
+                  onClick={handleLogin}
+                  disabled={!loginEmail.trim() || !loginPassword}
+                  loading={loginLoading}
+                >
+                  Přihlásit se →
+                </PrimaryBtn>
               </div>
-            </Card>
+            </>
+          )}
 
-            <Card>
-              <SectionLabel num={2} text="Nápad" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
-                marginBottom: topicMode ? "20px" : "0" }}>
-                {[
-                  { key: "ai",     line1: "Nic mě nenapadá,", line2: "něco navrhni" },
-                  { key: "custom", line1: "Napiš příspěvek",  line2: "na toto téma" },
-                ].map(opt => {
-                  const active = topicMode === opt.key;
-                  return (
-                    <div key={opt.key} onClick={() => setTopicMode(opt.key)} style={{
-                      border: `2px solid ${active ? BLUE : BORDER}`,
-                      borderRadius: "8px", padding: "16px 18px",
-                      cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
-                      transition: "all .15s",
-                    }}>
-                      <div style={{ fontWeight: "700", fontSize: "13px",
-                        color: active ? BLUE : DARK, lineHeight: "1.5" }}>
-                        {opt.line1}
-                      </div>
-                      <div style={{ fontWeight: "700", fontSize: "13px",
-                        color: active ? BLUE : DARK }}>
-                        {opt.line2}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {topicMode === "custom" && (
-                <div style={{ animation: "fadeIn .2s ease" }}>
-                  <textarea
-                    value={customTopic}
-                    onChange={e => setCustomTopic(e.target.value)}
-                    placeholder={`Napiš něco ve stylu:\n• Chystám se na veletrh...\n• Právě jsme dokončili nový projekt...\n• 5 tipů na lepší optickou síť...`}
-                    rows={5}
-                    style={{
-                      width: "100%", boxSizing: "border-box",
-                      border: `1.5px solid ${BORDER}`, borderRadius: "6px",
-                      padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
-                      lineHeight: "1.7", resize: "vertical", outline: "none",
-                      color: DARK, background: "#FAFBFD",
-                    }}
-                    onFocus={e => e.target.style.borderColor = BLUE}
-                    onBlur={e => e.target.style.borderColor = BORDER}
-                    autoFocus
-                  />
+          {/* ===== KROK 2 – KONTEXT ===== */}
+          {step === 2 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Styl" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+                  <SelectField label="Jazyk" value={language} onChange={setLanguage}
+                    options={[
+                      { value: "cs", label: "🇨🇿 Čeština" },
+                      { value: "en", label: "🇬🇧 Angličtina" },
+                    ]} />
+                  <SelectField label="Tón" value={tone} onChange={setTone}
+                    options={[
+                      { value: "insightful", label: "Insightful – odborný" },
+                      { value: "storytelling", label: "Storytelling – příběh" },
+                      { value: "casual", label: "Casual – přátelský" },
+                      { value: "data-driven", label: "Data-driven – faktický" },
+                    ]} />
                 </div>
-              )}
-            </Card>
+              </Card>
 
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <SecondaryBtn onClick={() => setStep(1)}>← Zpět</SecondaryBtn>
-              <PrimaryBtn onClick={handleStep2Next} disabled={!step2Valid} loading={loadingTopics || loadingPost}>
-                {topicMode === "ai" ? "Pokračovat na témata →" : "Pokračovat na příspěvek →"}
-              </PrimaryBtn>
-            </div>
-          </>
-        )}
-
-        {/* ===== KROK 3 – VÝBĚR TÉMATU (AI mode) ===== */}
-        {step === 3 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Výběr tématu" />
-              {topics.map(t => (
-                <div key={t.id} onClick={() => setSelectedTopic(t)} style={{
-                  border: `2px solid ${selectedTopic?.id === t.id ? BLUE : BORDER}`,
-                  borderRadius: "8px", padding: "16px 20px", marginBottom: "10px",
-                  cursor: "pointer", background: selectedTopic?.id === t.id ? "#EEF3FF" : WHITE,
-                  transition: "all .15s",
-                }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                    <div style={{
-                      width: "24px", height: "24px", borderRadius: "50%", flexShrink: 0,
-                      background: selectedTopic?.id === t.id ? BLUE : LIGHT_BG,
-                      border: `2px solid ${selectedTopic?.id === t.id ? BLUE : BORDER}`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: "11px", fontWeight: "800",
-                      color: selectedTopic?.id === t.id ? WHITE : MID,
-                    }}>
-                      {t.id}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: "700", fontSize: "14px", color: DARK, marginBottom: "6px" }}>
-                        {t.title}
+              <Card>
+                <SectionLabel num={2} text="Nápad" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
+                  marginBottom: topicMode ? "20px" : "0" }}>
+                  {[
+                    { key: "ai",     line1: "Nic mě nenapadá,", line2: "něco navrhni" },
+                    { key: "custom", line1: "Napiš příspěvek",  line2: "na toto téma" },
+                  ].map(opt => {
+                    const active = topicMode === opt.key;
+                    return (
+                      <div key={opt.key} onClick={() => setTopicMode(opt.key)} style={{
+                        border: `2px solid ${active ? BLUE : BORDER}`,
+                        borderRadius: "8px", padding: "16px 18px",
+                        cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
+                        transition: "all .15s",
+                      }}>
+                        <div style={{ fontWeight: "700", fontSize: "13px",
+                          color: active ? BLUE : DARK, lineHeight: "1.5" }}>
+                          {opt.line1}
+                        </div>
+                        <div style={{ fontWeight: "700", fontSize: "13px",
+                          color: active ? BLUE : DARK }}>
+                          {opt.line2}
+                        </div>
                       </div>
-                      <div style={{ fontSize: "13px", color: BLUE, fontStyle: "italic", lineHeight: "1.6" }}>
-                        {t.description}
+                    );
+                  })}
+                </div>
+
+                {topicMode === "custom" && (
+                  <div style={{ animation: "fadeIn .2s ease" }}>
+                    <textarea
+                      value={customTopic}
+                      onChange={e => setCustomTopic(e.target.value)}
+                      placeholder={`Napiš něco ve stylu:\n• Chystám se na veletrh...\n• Právě jsme dokončili nový projekt...\n• 5 tipů na lepší optickou síť...`}
+                      rows={5}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        border: `1.5px solid ${BORDER}`, borderRadius: "6px",
+                        padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
+                        lineHeight: "1.7", resize: "vertical", outline: "none",
+                        color: DARK, background: "#FAFBFD",
+                      }}
+                      onFocus={e => e.target.style.borderColor = BLUE}
+                      onBlur={e => e.target.style.borderColor = BORDER}
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </Card>
+
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <SecondaryBtn onClick={() => setStep(1)}>← Zpět</SecondaryBtn>
+                <PrimaryBtn onClick={handleStep2Next} disabled={!step2Valid} loading={loadingTopics || loadingPost}>
+                  {topicMode === "ai" ? "Pokračovat na témata →" : "Pokračovat na příspěvek →"}
+                </PrimaryBtn>
+              </div>
+            </>
+          )}
+
+          {/* ===== KROK 3 – VÝBĚR TÉMATU (AI mode) ===== */}
+          {step === 3 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Výběr tématu" />
+                {topics.map(t => (
+                  <div key={t.id} onClick={() => setSelectedTopic(t)} style={{
+                    border: `2px solid ${selectedTopic?.id === t.id ? BLUE : BORDER}`,
+                    borderRadius: "8px", padding: "16px 20px", marginBottom: "10px",
+                    cursor: "pointer", background: selectedTopic?.id === t.id ? "#EEF3FF" : WHITE,
+                    transition: "all .15s",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                      <div style={{
+                        width: "24px", height: "24px", borderRadius: "50%", flexShrink: 0,
+                        background: selectedTopic?.id === t.id ? BLUE : LIGHT_BG,
+                        border: `2px solid ${selectedTopic?.id === t.id ? BLUE : BORDER}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "11px", fontWeight: "800",
+                        color: selectedTopic?.id === t.id ? WHITE : MID,
+                      }}>
+                        {t.id}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: DARK, marginBottom: "6px" }}>
+                          {t.title}
+                        </div>
+                        <div style={{ fontSize: "13px", color: BLUE, fontStyle: "italic", lineHeight: "1.6" }}>
+                          {t.description}
+                        </div>
                       </div>
                     </div>
                   </div>
+                ))}
+              </Card>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <SecondaryBtn onClick={() => setStep(2)}>← Zpět</SecondaryBtn>
+                <PrimaryBtn onClick={() => generatePost()} disabled={!selectedTopic} loading={loadingPost}>
+                  Pokračovat na příspěvek →
+                </PrimaryBtn>
+              </div>
+            </>
+          )}
+
+          {/* ===== KROK 4 – POST ===== */}
+          {step === 4 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Návrh příspěvku" />
+                <div style={{ fontSize: "12px", color: MID, marginBottom: "12px" }}>
+                  Autor: <strong style={{ color: DARK }}>{profile?.name}</strong>
+                  &nbsp;·&nbsp;
+                  Téma: <strong style={{ color: BLUE }}>{selectedTopic?.title}</strong>
                 </div>
-              ))}
-            </Card>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <SecondaryBtn onClick={() => setStep(2)}>← Zpět</SecondaryBtn>
-              <PrimaryBtn onClick={() => generatePost()} disabled={!selectedTopic} loading={loadingPost}>
-                Pokračovat na příspěvek →
-              </PrimaryBtn>
-            </div>
-          </>
-        )}
-
-        {/* ===== KROK 4 – POST ===== */}
-        {step === 4 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Návrh příspěvku" />
-              <div style={{ fontSize: "12px", color: MID, marginBottom: "12px" }}>
-                Autor: <strong style={{ color: DARK }}>{profile?.name}</strong>
-                &nbsp;·&nbsp;
-                Téma: <strong style={{ color: BLUE }}>{selectedTopic?.title}</strong>
-              </div>
-              <textarea value={post} onChange={e => setPost(e.target.value)} rows={14}
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  border: `1.5px solid ${BORDER}`, borderRadius: "6px",
-                  padding: "14px 16px", fontSize: "14px", fontFamily: FONT,
-                  lineHeight: "1.8", resize: "vertical", outline: "none",
-                  color: DARK, background: "#FAFBFD",
-                }}
-                onFocus={e => e.target.style.borderColor = BLUE}
-                onBlur={e => e.target.style.borderColor = BORDER}
-              />
-              <div style={{ fontSize: "11px", color: MID, marginTop: "6px" }}>
-                {post.length} znaků · Text lze ručně upravit.
-              </div>
-            </Card>
-
-            <div style={{ display: "flex", gap: "12px", justifyContent: "space-between", alignItems: "center" }}>
-              <SecondaryBtn onClick={() => setStep(topicMode === "ai" ? 3 : 2)}>← Zpět</SecondaryBtn>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "nowrap" }}>
-                <button onClick={() => generatePost()} disabled={loadingPost} style={{
-                  background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
-                  padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
-                  fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
-                  cursor: loadingPost ? "not-allowed" : "pointer", fontFamily: FONT,
-                  opacity: loadingPost ? 0.5 : 1, display: "inline-flex", alignItems: "center",
-                }}>
-                  {loadingPost ? <><Spinner />Předělávám...</> : "↺ Předělat příspěvek"}
-                </button>
-                <button
-                  onClick={!loadingPolish && !loadingPost ? polishPost : undefined}
+                <textarea value={post} onChange={e => setPost(e.target.value)} rows={14}
                   style={{
+                    width: "100%", boxSizing: "border-box",
+                    border: `1.5px solid ${BORDER}`, borderRadius: "6px",
+                    padding: "14px 16px", fontSize: "14px", fontFamily: FONT,
+                    lineHeight: "1.8", resize: "vertical", outline: "none",
+                    color: DARK, background: "#FAFBFD",
+                  }}
+                  onFocus={e => e.target.style.borderColor = BLUE}
+                  onBlur={e => e.target.style.borderColor = BORDER}
+                />
+                <div style={{ fontSize: "11px", color: MID, marginTop: "6px" }}>
+                  {post.length} znaků · Text lze ručně upravit.
+                </div>
+              </Card>
+
+              <div style={{ display: "flex", gap: "12px", justifyContent: "space-between", alignItems: "center" }}>
+                <SecondaryBtn onClick={() => setStep(topicMode === "ai" ? 3 : 2)}>← Zpět</SecondaryBtn>
+                <div style={{ display: "flex", gap: "12px", flexWrap: "nowrap" }}>
+                  <button onClick={() => generatePost()} disabled={loadingPost} style={{
                     background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
                     padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
                     fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
-                    cursor: (loadingPolish || loadingPost) ? "not-allowed" : "pointer", fontFamily: FONT,
-                    opacity: (loadingPolish || loadingPost) ? 0.5 : 1,
-                    display: "inline-flex", alignItems: "center",
-                    pointerEvents: (loadingPolish || loadingPost) ? "none" : "auto",
-                  }}
-                >
-                  {loadingPolish ? <><Spinner />Uhlazuji...</> : "✦ Uhladit příspěvek"}
-                </button>
-                <PrimaryBtn onClick={() => setStep(5)}>
-                  Pokračovat na obrázek →
-                </PrimaryBtn>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ===== KROK 5 – OBRÁZEK ===== */}
-        {step === 5 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Obrázek" />
-              <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
-                AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků.
-              </div>
-
-              <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
-                color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "6px" }}>
-                Prompt pro generátor
-              </label>
-              <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} rows={3}
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  border: `1.5px solid ${BORDER}`, borderRadius: "6px",
-                  padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
-                  lineHeight: "1.7", resize: "vertical", outline: "none",
-                  color: DARK, background: "#FAFBFD", marginBottom: "16px",
-                }}
-                onFocus={e => e.target.style.borderColor = BLUE}
-                onBlur={e => e.target.style.borderColor = BORDER}
-              />
-
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
-                <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
-                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vygenerovat nové obrázky"}
-                </PrimaryBtn>
-              </div>
-
-              {imageError && (
-                <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
-                  borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
-                  color: "#DC2626", marginBottom: "16px" }}>
-                  ⚠ {imageError}
-                </div>
-              )}
-
-              {loadingImage && imageOptions.length === 0 && (
-                <div style={{ textAlign: "center", padding: "32px", color: MID, fontSize: "13px" }}>
-                  <div style={{ marginBottom: "12px", fontSize: "24px" }}>🎨</div>
-                  Generuji 3 návrhy obrázků, moment…
-                </div>
-              )}
-
-              {imageOptions.length > 0 && (
-                <>
-                  <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
-                    letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>
-                    Vyber jeden obrázek
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-                    {imageOptions.map((url, i) => {
-                      const selected = selectedImageUrl === url;
-                      return (
-                        <div key={i} onClick={() => setSelectedImageUrl(url)} style={{
-                          cursor: "pointer", borderRadius: "8px",
-                          border: `3px solid ${selected ? BLUE : BORDER}`,
-                          overflow: "hidden", position: "relative",
-                          transition: "border-color .15s",
-                          boxShadow: selected ? `0 0 0 2px ${BLUE}40` : "none",
-                        }}>
-                          <img src={url} alt={`Návrh ${i + 1}`}
-                            style={{ width: "100%", display: "block" }} />
-                          {selected && (
-                            <div style={{
-                              position: "absolute", top: "8px", right: "8px",
-                              background: BLUE, color: WHITE, borderRadius: "50%",
-                              width: "24px", height: "24px", display: "flex",
-                              alignItems: "center", justifyContent: "center",
-                              fontSize: "13px", fontWeight: "800",
-                            }}>✓</div>
-                          )}
-                          <div style={{
-                            position: "absolute", bottom: "0", left: "0", right: "0",
-                            background: selected ? `${BLUE}CC` : "#0002",
-                            color: WHITE, fontSize: "11px", fontWeight: "700",
-                            textAlign: "center", padding: "6px",
-                            letterSpacing: "1px", textTransform: "uppercase",
-                          }}>
-                            {selected ? "✓ Vybráno" : `Návrh ${i + 1}`}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </Card>
-
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <SecondaryBtn onClick={() => setStep(4)}>← Zpět</SecondaryBtn>
-              <PrimaryBtn onClick={() => setStep(6)} disabled={!selectedImageUrl}>
-                Pokračovat na autorizaci →
-              </PrimaryBtn>
-            </div>
-          </>
-        )}
-
-        {/* ===== KROK 6 – AUTORIZACE & ODESLÁNÍ ===== */}
-        {step === 6 && (
-          <>
-            <Card>
-              <SectionLabel num={1} text="Autorizace" />
-              <div style={{ fontSize: "13px", color: MID, marginBottom: "16px" }}>
-                Autor: <strong style={{ color: DARK }}>{profile?.name}</strong>
-                &nbsp;·&nbsp;
-                Téma: <strong style={{ color: BLUE }}>{selectedTopic?.title}</strong>
-              </div>
-              <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
-                color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
-                Text
-              </label>
-              <div style={{ background: LIGHT_BG, borderRadius: "6px", padding: "14px 16px",
-                fontSize: "14px", lineHeight: "1.8", color: DARK, marginBottom: "20px",
-                whiteSpace: "pre-wrap" }}>
-                {post}
-              </div>
-
-              {selectedImageUrl ? (
-                <div style={{ marginTop: "16px" }}>
-                  <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
-                    color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
-                    Obrázek
-                  </label>
-                  <img src={selectedImageUrl} alt="Obrázek k příspěvku"
-                    style={{ width: "100%", borderRadius: "8px", border: `1px solid ${BORDER}` }} />
-                </div>
-              ) : (
-                <div style={{ marginTop: "16px" }}>
-                  <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
-                    color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
-                    Obrázek
-                  </label>
-                  <div style={{
-                    width: "100%", aspectRatio: "1 / 1", maxHeight: "300px",
-                    borderRadius: "8px", border: `2px dashed ${BORDER}`,
-                    background: LIGHT_BG, display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center", gap: "8px",
+                    cursor: loadingPost ? "not-allowed" : "pointer", fontFamily: FONT,
+                    opacity: loadingPost ? 0.5 : 1, display: "inline-flex", alignItems: "center",
                   }}>
-                    <div style={{ fontSize: "32px", opacity: 0.3 }}>🖼</div>
-                    <div style={{ fontSize: "12px", color: MID, fontWeight: "600" }}>
-                      Obrázek nebyl vygenerován
+                    {loadingPost ? <><Spinner />Předělávám...</> : "↺ Předělat příspěvek"}
+                  </button>
+                  <button
+                    onClick={!loadingPolish && !loadingPost ? polishPost : undefined}
+                    style={{
+                      background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
+                      padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
+                      fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
+                      cursor: (loadingPolish || loadingPost) ? "not-allowed" : "pointer", fontFamily: FONT,
+                      opacity: (loadingPolish || loadingPost) ? 0.5 : 1,
+                      display: "inline-flex", alignItems: "center",
+                      pointerEvents: (loadingPolish || loadingPost) ? "none" : "auto",
+                    }}
+                  >
+                    {loadingPolish ? <><Spinner />Uhlazuji...</> : "✦ Uhladit příspěvek"}
+                  </button>
+                  <PrimaryBtn onClick={() => setStep(5)}>
+                    Pokračovat na obrázek →
+                  </PrimaryBtn>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ===== KROK 5 – OBRÁZEK ===== */}
+          {step === 5 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Obrázek" />
+                <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
+                  AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků.
+                </div>
+
+                <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
+                  color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "6px" }}>
+                  Prompt pro generátor
+                </label>
+                <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} rows={3}
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    border: `1.5px solid ${BORDER}`, borderRadius: "6px",
+                    padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
+                    lineHeight: "1.7", resize: "vertical", outline: "none",
+                    color: DARK, background: "#FAFBFD", marginBottom: "16px",
+                  }}
+                  onFocus={e => e.target.style.borderColor = BLUE}
+                  onBlur={e => e.target.style.borderColor = BORDER}
+                />
+
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
+                  <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
+                    {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vygenerovat nové obrázky"}
+                  </PrimaryBtn>
+                </div>
+
+                {imageError && (
+                  <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
+                    borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
+                    color: "#DC2626", marginBottom: "16px" }}>
+                    ⚠ {imageError}
+                  </div>
+                )}
+
+                {loadingImage && imageOptions.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "32px", color: MID, fontSize: "13px" }}>
+                    <div style={{ marginBottom: "12px", fontSize: "24px" }}>🎨</div>
+                    Generuji 3 návrhy obrázků, moment…
+                  </div>
+                )}
+
+                {imageOptions.length > 0 && (
+                  <>
+                    <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
+                      letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>
+                      Vyber jeden obrázek
                     </div>
-                    <div style={{ fontSize: "11px", color: MID }}>
-                      Vrať se na krok Obrázek a vygeneruj ho
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                      {imageOptions.map((url, i) => {
+                        const selected = selectedImageUrl === url;
+                        return (
+                          <div key={i} onClick={() => setSelectedImageUrl(url)} style={{
+                            cursor: "pointer", borderRadius: "8px",
+                            border: `3px solid ${selected ? BLUE : BORDER}`,
+                            overflow: "hidden", position: "relative",
+                            transition: "border-color .15s",
+                            boxShadow: selected ? `0 0 0 2px ${BLUE}40` : "none",
+                          }}>
+                            <img src={url} alt={`Návrh ${i + 1}`}
+                              style={{ width: "100%", display: "block" }} />
+                            {selected && (
+                              <div style={{
+                                position: "absolute", top: "8px", right: "8px",
+                                background: BLUE, color: WHITE, borderRadius: "50%",
+                                width: "24px", height: "24px", display: "flex",
+                                alignItems: "center", justifyContent: "center",
+                                fontSize: "13px", fontWeight: "800",
+                              }}>✓</div>
+                            )}
+                            <div style={{
+                              position: "absolute", bottom: "0", left: "0", right: "0",
+                              background: selected ? `${BLUE}CC` : "#0002",
+                              color: WHITE, fontSize: "11px", fontWeight: "700",
+                              textAlign: "center", padding: "6px",
+                              letterSpacing: "1px", textTransform: "uppercase",
+                            }}>
+                              {selected ? "✓ Vybráno" : `Návrh ${i + 1}`}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </Card>
+
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <SecondaryBtn onClick={() => setStep(4)}>← Zpět</SecondaryBtn>
+                <PrimaryBtn onClick={() => setStep(6)} disabled={!selectedImageUrl}>
+                  Pokračovat na autorizaci →
+                </PrimaryBtn>
+              </div>
+            </>
+          )}
+
+          {/* ===== KROK 6 – AUTORIZACE & ODESLÁNÍ ===== */}
+          {step === 6 && (
+            <>
+              <Card>
+                <SectionLabel num={1} text="Autorizace" />
+                <div style={{ fontSize: "13px", color: MID, marginBottom: "16px" }}>
+                  Autor: <strong style={{ color: DARK }}>{profile?.name}</strong>
+                  &nbsp;·&nbsp;
+                  Téma: <strong style={{ color: BLUE }}>{selectedTopic?.title}</strong>
+                </div>
+                <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
+                  color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                  Text
+                </label>
+                <div style={{ background: LIGHT_BG, borderRadius: "6px", padding: "14px 16px",
+                  fontSize: "14px", lineHeight: "1.8", color: DARK, marginBottom: "20px",
+                  whiteSpace: "pre-wrap" }}>
+                  {post}
+                </div>
+
+                {selectedImageUrl ? (
+                  <div style={{ marginTop: "16px" }}>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
+                      color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                      Obrázek
+                    </label>
+                    <img src={selectedImageUrl} alt="Obrázek k příspěvku"
+                      style={{ width: "100%", borderRadius: "8px", border: `1px solid ${BORDER}` }} />
+                  </div>
+                ) : (
+                  <div style={{ marginTop: "16px" }}>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
+                      color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                      Obrázek
+                    </label>
+                    <div style={{
+                      width: "100%", aspectRatio: "1 / 1", maxHeight: "300px",
+                      borderRadius: "8px", border: `2px dashed ${BORDER}`,
+                      background: LIGHT_BG, display: "flex", flexDirection: "column",
+                      alignItems: "center", justifyContent: "center", gap: "8px",
+                    }}>
+                      <div style={{ fontSize: "32px", opacity: 0.3 }}>🖼</div>
+                      <div style={{ fontSize: "12px", color: MID, fontWeight: "600" }}>
+                        Obrázek nebyl vygenerován
+                      </div>
+                      <div style={{ fontSize: "11px", color: MID }}>
+                        Vrať se na krok Obrázek a vygeneruj ho
+                      </div>
                     </div>
                   </div>
+                )}
+              </Card>
+
+              {sendStatus === "ok" && (
+                <div style={{ background: "#ECFDF5", border: "1px solid #6EE7B7",
+                  borderRadius: "8px", padding: "16px 20px", color: "#059669",
+                  fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
+                  ✓ Odesláno na Make! LinkedIn draft se zpracovává. Příspěvek byl uložen do archivu.
                 </div>
               )}
-            </Card>
+              {sendStatus === "error" && (
+                <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
+                  borderRadius: "8px", padding: "16px 20px", color: "#DC2626",
+                  fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
+                  ⚠ Chyba při odesílání. Zkontroluj Make webhook URL.
+                </div>
+              )}
 
-            {sendStatus === "ok" && (
-              <div style={{ background: "#ECFDF5", border: "1px solid #6EE7B7",
-                borderRadius: "8px", padding: "16px 20px", color: "#059669",
-                fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
-                ✓ Odesláno na Make! LinkedIn draft se zpracovává.
+              <div style={{ display: "flex", justifyContent: "space-between",
+                alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                <SecondaryBtn onClick={() => setStep(5)}>← Zpět</SecondaryBtn>
+                <PrimaryBtn
+                  onClick={sendToMake}
+                  disabled={!post.trim() || sendStatus === "ok"}
+                  loading={sendStatus === "sending"}
+                >
+                  {sendStatus === "ok" ? "✓ Odesláno" : "Odeslat na LinkedIn →"}
+                </PrimaryBtn>
               </div>
-            )}
-            {sendStatus === "error" && (
-              <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
-                borderRadius: "8px", padding: "16px 20px", color: "#DC2626",
-                fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
-                ⚠ Chyba při odesílání. Zkontroluj Make webhook URL.
-              </div>
-            )}
+            </>
+          )}
 
-            <div style={{ display: "flex", justifyContent: "space-between",
-              alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-              <SecondaryBtn onClick={() => setStep(5)}>← Zpět</SecondaryBtn>
-              <PrimaryBtn
-                onClick={sendToMake}
-                disabled={!post.trim() || sendStatus === "ok"}
-                loading={sendStatus === "sending"}
-              >
-                {sendStatus === "ok" ? "✓ Odesláno" : "Odeslat na LinkedIn →"}
-              </PrimaryBtn>
-            </div>
-          </>
-        )}
-
-      </div>
+        </div>
+      )}
 
       <style>{`
         * { box-sizing: border-box; }
