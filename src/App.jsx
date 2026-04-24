@@ -202,7 +202,8 @@ export default function LinkedInPostGenerator() {
 
   // Krok 5 – obrázek
   const [imagePrompt, setImagePrompt] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageOptions, setImageOptions] = useState([]); // 3 návrhy URL
+  const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [loadingImage, setLoadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
 
@@ -334,26 +335,29 @@ Vrať POUZE text příspěvku.`;
     }
   };
 
-  // === GENEROVÁNÍ OBRÁZKU ===
+  // === GENEROVÁNÍ 3 OBRÁZKŮ ===
   const generateImage = async () => {
     if (!imagePrompt.trim()) return;
     setLoadingImage(true);
-    setImageUrl("");
+    setImageOptions([]);
+    setSelectedImageUrl("");
     setImageError("");
     try {
-      const res = await fetch("/api/openai-image", {
+      const callImage = () => fetch("/api/openai-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: imagePrompt }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        setImageUrl(data.url);
+      }).then(r => r.json());
+
+      const results = await Promise.all([callImage(), callImage(), callImage()]);
+      const urls = results.filter(d => d.url).map(d => d.url);
+      if (urls.length === 0) {
+        setImageError(results[0]?.error || "Obrázky se nepodařilo vygenerovat.");
       } else {
-        setImageError(data.error || "Obrázek se nepodařilo vygenerovat.");
+        setImageOptions(urls);
       }
     } catch (e) {
-      setImageError("Chyba při generování obrázku: " + e.message);
+      setImageError("Chyba při generování obrázků: " + e.message);
     } finally {
       setLoadingImage(false);
     }
@@ -399,7 +403,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
           topic: selectedTopic?.title,
           language,
           post_text: post,
-          image_url: imageUrl || "",
+          image_url: selectedImageUrl || "",
           timestamp: new Date().toISOString(),
         }),
       });
@@ -421,7 +425,8 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setSelectedTopic(null);
     setPost("");
     setSendStatus(null);
-    setImageUrl("");
+    setImageOptions([]);
+    setSelectedImageUrl("");
     setImagePrompt("");
     setImageError("");
   };
@@ -695,7 +700,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
             <Card>
               <SectionLabel num={1} text="Obrázek" />
               <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
-                AI vygenerovala návrh promptu z textu příspěvku. Můžeš ho upravit a vygenerovat obrázek.
+                AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků — vyber jeden pro LinkedIn.
               </div>
 
               <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
@@ -714,9 +719,20 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 onBlur={e => e.target.style.borderColor = BORDER}
               />
 
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
-                <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim()} loading={loadingImage}>
-                  Generovat obrázek →
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginBottom: "20px" }}>
+                {imageOptions.length > 0 && (
+                  <button onClick={generateImage} disabled={loadingImage} style={{
+                    background: WHITE, color: BLUE, border: `2px solid ${BLUE}`,
+                    padding: "12px 24px", borderRadius: "4px", fontWeight: "700",
+                    fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
+                    cursor: loadingImage ? "not-allowed" : "pointer", fontFamily: FONT,
+                    opacity: loadingImage ? 0.5 : 1, display: "inline-flex", alignItems: "center",
+                  }}>
+                    {loadingImage ? <><Spinner />Generuji...</> : "↺ Vytvořit nové obrázky"}
+                  </button>
+                )}
+                <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage && imageOptions.length === 0}>
+                  {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Generovat znovu"}
                 </PrimaryBtn>
               </div>
 
@@ -728,20 +744,66 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 </div>
               )}
 
-              {imageUrl && (
-                <div style={{ marginTop: "8px" }}>
-                  <img src={imageUrl} alt="Vygenerovaný obrázek"
-                    style={{ width: "100%", borderRadius: "8px", border: `1px solid ${BORDER}` }} />
-                  <div style={{ fontSize: "11px", color: MID, marginTop: "8px" }}>
-                    Obrázek bude odeslán spolu s příspěvkem na LinkedIn.
-                  </div>
+              {loadingImage && imageOptions.length === 0 && (
+                <div style={{ textAlign: "center", padding: "32px", color: MID, fontSize: "13px" }}>
+                  <div style={{ marginBottom: "12px", fontSize: "24px" }}>🎨</div>
+                  Generuji 3 návrhy obrázků, moment…
                 </div>
+              )}
+
+              {imageOptions.length > 0 && (
+                <>
+                  <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
+                    letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>
+                    Vyber jeden obrázek
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                    {imageOptions.map((url, i) => {
+                      const selected = selectedImageUrl === url;
+                      return (
+                        <div key={i} onClick={() => setSelectedImageUrl(url)} style={{
+                          cursor: "pointer", borderRadius: "8px",
+                          border: `3px solid ${selected ? BLUE : BORDER}`,
+                          overflow: "hidden", position: "relative",
+                          transition: "border-color .15s",
+                          boxShadow: selected ? `0 0 0 2px ${BLUE}40` : "none",
+                        }}>
+                          <img src={url} alt={`Návrh ${i + 1}`}
+                            style={{ width: "100%", display: "block" }} />
+                          {selected && (
+                            <div style={{
+                              position: "absolute", top: "8px", right: "8px",
+                              background: BLUE, color: WHITE, borderRadius: "50%",
+                              width: "24px", height: "24px", display: "flex",
+                              alignItems: "center", justifyContent: "center",
+                              fontSize: "13px", fontWeight: "800",
+                            }}>✓</div>
+                          )}
+                          <div style={{
+                            position: "absolute", bottom: "0", left: "0", right: "0",
+                            background: selected ? `${BLUE}CC` : "#0002",
+                            color: WHITE, fontSize: "11px", fontWeight: "700",
+                            textAlign: "center", padding: "6px",
+                            letterSpacing: "1px", textTransform: "uppercase",
+                          }}>
+                            {selected ? "✓ Vybráno" : `Návrh ${i + 1}`}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {selectedImageUrl && (
+                    <div style={{ fontSize: "11px", color: MID, marginTop: "10px" }}>
+                      Vybraný obrázek bude odeslán spolu s příspěvkem na LinkedIn.
+                    </div>
+                  )}
+                </>
               )}
             </Card>
 
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <SecondaryBtn onClick={() => setStep(4)}>← Zpět</SecondaryBtn>
-              <PrimaryBtn onClick={() => setStep(6)}>
+              <PrimaryBtn onClick={() => setStep(6)} disabled={!selectedImageUrl}>
                 Pokračovat na autorizaci →
               </PrimaryBtn>
             </div>
@@ -768,13 +830,13 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 {post}
               </div>
 
-              {imageUrl ? (
+              {selectedImageUrl ? (
                 <div style={{ marginTop: "16px" }}>
                   <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
                     color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
                     Obrázek
                   </label>
-                  <img src={imageUrl} alt="Obrázek k příspěvku"
+                  <img src={selectedImageUrl} alt="Obrázek k příspěvku"
                     style={{ width: "100%", borderRadius: "8px", border: `1px solid ${BORDER}` }} />
                 </div>
               ) : (
