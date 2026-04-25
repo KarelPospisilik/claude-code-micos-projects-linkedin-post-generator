@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
-  collection, query, where, orderBy,
+  collection, query, where,
   getDocs, addDoc, deleteDoc, doc,
 } from "firebase/firestore";
 
@@ -29,11 +29,12 @@ const PROFILES = [
 const fetchArchive = async (profileId) => {
   const q = query(
     collection(db, "posts"),
-    where("profileId", "==", profileId),
-    orderBy("sentAt", "desc")
+    where("profileId", "==", profileId)
   );
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+  const docs = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+  // Seřadit od nejnovějšího (ISO string se řadí správně lexikograficky)
+  return docs.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
 };
 
 const formatDate = (iso) => {
