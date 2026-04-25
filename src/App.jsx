@@ -1060,7 +1060,6 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                   <>
                     <div style={{ fontSize: "12px", color: MID, marginBottom: "20px" }}>
                       Nahraj obrázek ze svého zařízení (JPG, PNG, WebP · max 4 MB).
-                      Po nahrání se obrázek uloží online a pošle přes Make na LinkedIn.
                     </div>
 
                     {/* File input – stylovaný */}
