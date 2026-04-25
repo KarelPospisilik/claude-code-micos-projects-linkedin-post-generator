@@ -1138,7 +1138,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                       <div style={{ background: "#ECFDF5", border: "1px solid #6EE7B7",
                         borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
                         color: "#059669", fontWeight: "700", marginBottom: "16px" }}>
-                        ✓ Obrázek nahrán a připraven k odeslání.
+                        ✓ Obrázek nahrán.
                       </div>
                     )}
 
@@ -1224,7 +1224,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 <div style={{ background: "#ECFDF5", border: "1px solid #6EE7B7",
                   borderRadius: "8px", padding: "16px 20px", color: "#059669",
                   fontWeight: "700", fontSize: "14px", marginBottom: "16px" }}>
-                  ✓ Odesláno na Make! LinkedIn draft se zpracovává. Příspěvek byl uložen do archivu.
+                  ✓ Příspěvek odeslán na LinkedIn.
                 </div>
               )}
               {sendStatus === "error" && (
