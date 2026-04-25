@@ -1,4 +1,9 @@
 import { useState, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  collection, query, where, orderBy,
+  getDocs, addDoc, deleteDoc, doc,
+} from "firebase/firestore";
 
 // === BARVY ===
 const BLUE = "#0033A0";
@@ -20,17 +25,15 @@ const PROFILES = [
   { id: "karel",  name: "Karel Pospíšilík", role: "Marketing, PLP Czech Republic",  styleExamples: "" },
 ];
 
-// === ARCHIV – localStorage helpers ===
-const archiveKey = (profileId) => `plp_archive_${profileId}`;
-
-const loadArchiveFromStorage = (profileId) => {
-  try {
-    return JSON.parse(localStorage.getItem(archiveKey(profileId)) || "[]");
-  } catch { return []; }
-};
-
-const persistArchive = (profileId, entries) => {
-  localStorage.setItem(archiveKey(profileId), JSON.stringify(entries));
+// === ARCHIV – Firestore helpers ===
+const fetchArchive = async (profileId) => {
+  const q = query(
+    collection(db, "posts"),
+    where("profileId", "==", profileId),
+    orderBy("sentAt", "desc")
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
 };
 
 const formatDate = (iso) => {
@@ -236,6 +239,7 @@ export default function LinkedInPostGenerator() {
 
   // Archiv
   const [archive, setArchive] = useState([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
@@ -256,8 +260,13 @@ export default function LinkedInPostGenerator() {
       const data = await res.json();
       if (data.ok) {
         setSelectedProfileId(data.profileId);
-        setArchive(loadArchiveFromStorage(data.profileId));
         setStep(2);
+        // Načti archiv z Firestore na pozadí
+        setArchiveLoading(true);
+        fetchArchive(data.profileId)
+          .then(entries => setArchive(entries))
+          .catch(() => setArchive([]))
+          .finally(() => setArchiveLoading(false));
       } else {
         setLoginError(data.error || "Nesprávný email nebo heslo.");
       }
@@ -448,18 +457,17 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
         }),
       });
 
-      // Uložit do archivu
+      // Uložit do Firestore archivu
       const entry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        profileId: selectedProfileId,
         sentAt: new Date().toISOString(),
         topic: selectedTopic?.title || "",
         post_text: post,
         image_url: selectedImageUrl || "",
         language,
       };
-      const updated = [entry, ...archive];
-      setArchive(updated);
-      persistArchive(selectedProfileId, updated);
+      const docRef = await addDoc(collection(db, "posts"), entry);
+      setArchive(prev => [{ docId: docRef.id, ...entry }, ...prev]);
 
       setSendStatus("ok");
     } catch {
@@ -502,11 +510,14 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
   };
 
   // === SMAZAT Z ARCHIVU ===
-  const deleteFromArchive = (id) => {
-    const updated = archive.filter(e => e.id !== id);
-    setArchive(updated);
-    persistArchive(selectedProfileId, updated);
-    if (expandedArchiveId === id) setExpandedArchiveId(null);
+  const deleteFromArchive = async (docId) => {
+    try {
+      await deleteDoc(doc(db, "posts", docId));
+      setArchive(prev => prev.filter(e => e.docId !== docId));
+      if (expandedArchiveId === docId) setExpandedArchiveId(null);
+    } catch (e) {
+      alert("Chyba při mazání: " + e.message);
+    }
   };
 
   const reset = () => {
@@ -530,6 +541,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setUploadPreview("");
     setUploadError("");
     setArchive([]);
+    setArchiveLoading(false);
     setExpandedArchiveId(null);
   };
 
@@ -550,8 +562,17 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
         <SecondaryBtn onClick={() => setShowArchive(false)}>← Zpět</SecondaryBtn>
       </div>
 
+      {/* Loading stav */}
+      {archiveLoading && (
+        <Card>
+          <div style={{ textAlign: "center", padding: "40px 20px", color: MID }}>
+            <div style={{ fontSize: "13px" }}>Načítám archiv…</div>
+          </div>
+        </Card>
+      )}
+
       {/* Prázdný stav */}
-      {archive.length === 0 && (
+      {!archiveLoading && archive.length === 0 && (
         <Card>
           <div style={{ textAlign: "center", padding: "40px 20px", color: MID }}>
             <div style={{ fontSize: "36px", marginBottom: "12px" }}>📂</div>
@@ -566,15 +587,15 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
       )}
 
       {/* Záznamy */}
-      {archive.map(entry => {
-        const expanded = expandedArchiveId === entry.id;
+      {!archiveLoading && archive.map(entry => {
+        const expanded = expandedArchiveId === entry.docId;
         const longText = entry.post_text.length > 220;
         const previewText = longText && !expanded
           ? entry.post_text.slice(0, 220) + "…"
           : entry.post_text;
 
         return (
-          <Card key={entry.id} style={{ marginBottom: "16px" }}>
+          <Card key={entry.docId} style={{ marginBottom: "16px" }}>
             {/* Datum + jazyk */}
             <div style={{ fontSize: "11px", color: MID, marginBottom: "8px",
               letterSpacing: "0.5px" }}>
@@ -597,7 +618,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 </div>
                 {longText && (
                   <button
-                    onClick={() => setExpandedArchiveId(expanded ? null : entry.id)}
+                    onClick={() => setExpandedArchiveId(expanded ? null : entry.docId)}
                     style={{
                       background: "none", border: "none", color: BLUE,
                       fontSize: "12px", fontWeight: "700", cursor: "pointer",
@@ -630,7 +651,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
               <button
                 onClick={() => {
                   if (window.confirm("Opravdu chceš tento příspěvek odstranit z archivu?")) {
-                    deleteFromArchive(entry.id);
+                    deleteFromArchive(entry.docId);
                   }
                 }}
                 style={{
