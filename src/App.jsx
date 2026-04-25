@@ -222,11 +222,17 @@ export default function LinkedInPostGenerator() {
   const [sendStatus, setSendStatus] = useState(null);
 
   // Krok 5 – obrázek
+  const [imageMode, setImageMode] = useState("ai"); // "ai" | "upload"
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageOptions, setImageOptions] = useState([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
   const [loadingImage, setLoadingImage] = useState(false);
   const [imageError, setImageError] = useState("");
+
+  // Krok 5 – vlastní upload
+  const [uploadPreview, setUploadPreview] = useState("");
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   // Archiv
   const [archive, setArchive] = useState([]);
@@ -461,6 +467,40 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     }
   };
 
+  // === UPLOAD VLASTNÍHO OBRÁZKU ===
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError("");
+    setSelectedImageUrl("");
+    const reader = new FileReader();
+    reader.onload = (ev) => setUploadPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const uploadImage = async () => {
+    if (!uploadPreview) return;
+    setUploadLoading(true);
+    setUploadError("");
+    try {
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64: uploadPreview }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setSelectedImageUrl(data.url);
+      } else {
+        setUploadError(data.error || "Upload selhal.");
+      }
+    } catch (e) {
+      setUploadError("Chyba při nahrávání: " + e.message);
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   // === SMAZAT Z ARCHIVU ===
   const deleteFromArchive = (id) => {
     const updated = archive.filter(e => e.id !== id);
@@ -482,10 +522,13 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setSelectedTopic(null);
     setPost("");
     setSendStatus(null);
+    setImageMode("ai");
     setImageOptions([]);
     setSelectedImageUrl("");
     setImagePrompt("");
     setImageError("");
+    setUploadPreview("");
+    setUploadError("");
     setArchive([]);
     setExpandedArchiveId(null);
   };
@@ -898,88 +941,198 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
             <>
               <Card>
                 <SectionLabel num={1} text="Obrázek" />
-                <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
-                  AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků.
+
+                {/* Přepínač AI / Vlastní */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
+                  {[
+                    { key: "ai",     label: "🤖 Vygenerovat AI obrázek" },
+                    { key: "upload", label: "📁 Nahrát vlastní obrázek" },
+                  ].map(opt => {
+                    const active = imageMode === opt.key;
+                    return (
+                      <div key={opt.key} onClick={() => {
+                        setImageMode(opt.key);
+                        setSelectedImageUrl("");
+                        setUploadError("");
+                        setImageError("");
+                      }} style={{
+                        border: `2px solid ${active ? BLUE : BORDER}`,
+                        borderRadius: "8px", padding: "12px 16px",
+                        cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
+                        transition: "all .15s", textAlign: "center",
+                        fontWeight: "700", fontSize: "13px",
+                        color: active ? BLUE : MID,
+                        letterSpacing: "0.5px",
+                      }}>
+                        {opt.label}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
-                  color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "6px" }}>
-                  Prompt pro generátor
-                </label>
-                <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} rows={3}
-                  style={{
-                    width: "100%", boxSizing: "border-box",
-                    border: `1.5px solid ${BORDER}`, borderRadius: "6px",
-                    padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
-                    lineHeight: "1.7", resize: "vertical", outline: "none",
-                    color: DARK, background: "#FAFBFD", marginBottom: "16px",
-                  }}
-                  onFocus={e => e.target.style.borderColor = BLUE}
-                  onBlur={e => e.target.style.borderColor = BORDER}
-                />
-
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
-                  <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
-                    {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vygenerovat nové obrázky"}
-                  </PrimaryBtn>
-                </div>
-
-                {imageError && (
-                  <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
-                    borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
-                    color: "#DC2626", marginBottom: "16px" }}>
-                    ⚠ {imageError}
-                  </div>
-                )}
-
-                {loadingImage && imageOptions.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "32px", color: MID, fontSize: "13px" }}>
-                    <div style={{ marginBottom: "12px", fontSize: "24px" }}>🎨</div>
-                    Generuji 3 návrhy obrázků, moment…
-                  </div>
-                )}
-
-                {imageOptions.length > 0 && (
+                {/* === AI GENEROVÁNÍ === */}
+                {imageMode === "ai" && (
                   <>
-                    <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
-                      letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>
-                      Vyber jeden obrázek
+                    <div style={{ fontSize: "12px", color: MID, marginBottom: "16px" }}>
+                      AI vygenerovala návrh promptu z textu příspěvku. Uprav ho a vygeneruj 3 návrhy obrázků.
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
-                      {imageOptions.map((url, i) => {
-                        const selected = selectedImageUrl === url;
-                        return (
-                          <div key={i} onClick={() => setSelectedImageUrl(url)} style={{
-                            cursor: "pointer", borderRadius: "8px",
-                            border: `3px solid ${selected ? BLUE : BORDER}`,
-                            overflow: "hidden", position: "relative",
-                            transition: "border-color .15s",
-                            boxShadow: selected ? `0 0 0 2px ${BLUE}40` : "none",
-                          }}>
-                            <img src={url} alt={`Návrh ${i + 1}`}
-                              style={{ width: "100%", display: "block" }} />
-                            {selected && (
-                              <div style={{
-                                position: "absolute", top: "8px", right: "8px",
-                                background: BLUE, color: WHITE, borderRadius: "50%",
-                                width: "24px", height: "24px", display: "flex",
-                                alignItems: "center", justifyContent: "center",
-                                fontSize: "13px", fontWeight: "800",
-                              }}>✓</div>
-                            )}
-                            <div style={{
-                              position: "absolute", bottom: "0", left: "0", right: "0",
-                              background: selected ? `${BLUE}CC` : "#0002",
-                              color: WHITE, fontSize: "11px", fontWeight: "700",
-                              textAlign: "center", padding: "6px",
-                              letterSpacing: "1px", textTransform: "uppercase",
-                            }}>
-                              {selected ? "✓ Vybráno" : `Návrh ${i + 1}`}
-                            </div>
-                          </div>
-                        );
-                      })}
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: "700",
+                      color: MID, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "6px" }}>
+                      Prompt pro generátor
+                    </label>
+                    <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} rows={3}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        border: `1.5px solid ${BORDER}`, borderRadius: "6px",
+                        padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
+                        lineHeight: "1.7", resize: "vertical", outline: "none",
+                        color: DARK, background: "#FAFBFD", marginBottom: "16px",
+                      }}
+                      onFocus={e => e.target.style.borderColor = BLUE}
+                      onBlur={e => e.target.style.borderColor = BORDER}
+                    />
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
+                      <PrimaryBtn onClick={generateImage} disabled={!imagePrompt.trim() || loadingImage} loading={loadingImage}>
+                        {imageOptions.length === 0 ? "Generovat obrázky →" : "↺ Vygenerovat nové obrázky"}
+                      </PrimaryBtn>
                     </div>
+
+                    {imageError && (
+                      <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
+                        borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
+                        color: "#DC2626", marginBottom: "16px" }}>
+                        ⚠ {imageError}
+                      </div>
+                    )}
+                    {loadingImage && imageOptions.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "32px", color: MID, fontSize: "13px" }}>
+                        <div style={{ marginBottom: "12px", fontSize: "24px" }}>🎨</div>
+                        Generuji 3 návrhy obrázků, moment…
+                      </div>
+                    )}
+                    {imageOptions.length > 0 && (
+                      <>
+                        <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
+                          letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>
+                          Vyber jeden obrázek
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                          {imageOptions.map((url, i) => {
+                            const selected = selectedImageUrl === url;
+                            return (
+                              <div key={i} onClick={() => setSelectedImageUrl(url)} style={{
+                                cursor: "pointer", borderRadius: "8px",
+                                border: `3px solid ${selected ? BLUE : BORDER}`,
+                                overflow: "hidden", position: "relative",
+                                transition: "border-color .15s",
+                                boxShadow: selected ? `0 0 0 2px ${BLUE}40` : "none",
+                              }}>
+                                <img src={url} alt={`Návrh ${i + 1}`} style={{ width: "100%", display: "block" }} />
+                                {selected && (
+                                  <div style={{
+                                    position: "absolute", top: "8px", right: "8px",
+                                    background: BLUE, color: WHITE, borderRadius: "50%",
+                                    width: "24px", height: "24px", display: "flex",
+                                    alignItems: "center", justifyContent: "center",
+                                    fontSize: "13px", fontWeight: "800",
+                                  }}>✓</div>
+                                )}
+                                <div style={{
+                                  position: "absolute", bottom: "0", left: "0", right: "0",
+                                  background: selected ? `${BLUE}CC` : "#0002",
+                                  color: WHITE, fontSize: "11px", fontWeight: "700",
+                                  textAlign: "center", padding: "6px",
+                                  letterSpacing: "1px", textTransform: "uppercase",
+                                }}>
+                                  {selected ? "✓ Vybráno" : `Návrh ${i + 1}`}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* === VLASTNÍ UPLOAD === */}
+                {imageMode === "upload" && (
+                  <>
+                    <div style={{ fontSize: "12px", color: MID, marginBottom: "20px" }}>
+                      Nahraj obrázek ze svého zařízení (JPG, PNG, WebP · max 4 MB).
+                      Po nahrání se obrázek uloží online a pošle přes Make na LinkedIn.
+                    </div>
+
+                    {/* File input – stylovaný */}
+                    <label style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      gap: "10px", padding: "14px 24px", borderRadius: "6px",
+                      border: `2px dashed ${BORDER}`, cursor: "pointer",
+                      background: "#FAFBFD", color: BLUE, fontWeight: "700",
+                      fontSize: "13px", letterSpacing: "1px", textTransform: "uppercase",
+                      marginBottom: "20px", transition: "border-color .15s",
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = BLUE}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}
+                    >
+                      📁 Vybrat soubor
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        style={{ display: "none" }}
+                        onChange={handleFileSelect}
+                      />
+                    </label>
+
+                    {/* Náhled */}
+                    {uploadPreview && (
+                      <div style={{ marginBottom: "20px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "700", color: MID,
+                          letterSpacing: "1px", textTransform: "uppercase", marginBottom: "10px" }}>
+                          Náhled
+                        </div>
+                        <img
+                          src={uploadPreview}
+                          alt="Náhled"
+                          style={{
+                            width: "100%", maxHeight: "320px", objectFit: "contain",
+                            borderRadius: "8px", border: `1px solid ${BORDER}`,
+                            background: LIGHT_BG,
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Chyba uploadu */}
+                    {uploadError && (
+                      <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5",
+                        borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
+                        color: "#DC2626", marginBottom: "16px" }}>
+                        ⚠ {uploadError}
+                      </div>
+                    )}
+
+                    {/* Úspěch */}
+                    {selectedImageUrl && !uploadLoading && (
+                      <div style={{ background: "#ECFDF5", border: "1px solid #6EE7B7",
+                        borderRadius: "6px", padding: "12px 16px", fontSize: "13px",
+                        color: "#059669", fontWeight: "700", marginBottom: "16px" }}>
+                        ✓ Obrázek nahrán a připraven k odeslání.
+                      </div>
+                    )}
+
+                    {/* Tlačítko nahrát */}
+                    {uploadPreview && (
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <PrimaryBtn
+                          onClick={uploadImage}
+                          disabled={!uploadPreview || uploadLoading || !!selectedImageUrl}
+                          loading={uploadLoading}
+                        >
+                          {selectedImageUrl ? "✓ Nahráno" : "Nahrát obrázek →"}
+                        </PrimaryBtn>
+                      </div>
+                    )}
                   </>
                 )}
               </Card>
