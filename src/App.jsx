@@ -799,8 +799,8 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
                   marginBottom: topicMode ? "20px" : "0" }}>
                   {[
-                    { key: "ai",     line1: "Nic mě nenapadá,", line2: "něco navrhni" },
                     { key: "custom", line1: "Napiš příspěvek",  line2: "na toto téma" },
+                    { key: "ai",     line1: "Nic mě nenapadá,", line2: "něco navrhni" },
                   ].map(opt => {
                     const active = topicMode === opt.key;
                     return (
