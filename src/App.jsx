@@ -737,7 +737,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
               <Card>
                 <SectionLabel num={1} text="Přihlášení" />
                 <InputField
-                  label="Email"
+                  label="E-mail"
                   type="email"
                   value={loginEmail}
                   onChange={setLoginEmail}
