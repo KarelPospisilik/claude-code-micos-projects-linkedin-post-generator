@@ -213,6 +213,7 @@ export default function LinkedInPostGenerator() {
   const [tone, setTone] = useState("insightful");
   const [postLength, setPostLength] = useState("medium"); // "short" | "medium" | "long"
   const [topicMode, setTopicMode] = useState(null);
+  const [topicArea, setTopicArea] = useState(null);
   const [customTopic, setCustomTopic] = useState("");
 
   // Krok 3 – témata
@@ -246,7 +247,7 @@ export default function LinkedInPostGenerator() {
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
   const profile = PROFILES.find(p => p.id === selectedProfileId) || null;
-  const step2Valid = topicMode === "ai" || (topicMode === "custom" && customTopic.trim().length > 0);
+  const step2Valid = (topicMode === "ai" && topicArea !== null) || (topicMode === "custom" && customTopic.trim().length > 0);
 
   // === PŘIHLÁŠENÍ ===
   const handleLogin = async () => {
@@ -299,7 +300,7 @@ export default function LinkedInPostGenerator() {
       ? `\nTato témata již byla použita v minulých příspěvcích – VYHNI se jim a nepředkládej podobná:\n${usedTopics.map(t => `- ${t}`).join("\n")}`
       : "";
 
-    const prompt = `Jsi expert na LinkedIn obsah v oboru telekomunikační infrastruktury a FTTx sítí.
+    const prompt = `Jsi expert na LinkedIn obsah v oboru: ${topicArea}.
 Vygeneruj 5 silných nápadů na LinkedIn příspěvky pro:
 - Jméno: ${profile.name}
 - Role: ${profile.role}
@@ -532,6 +533,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setSelectedProfileId("");
     setPostLength("medium");
     setTopicMode(null);
+    setTopicArea(null);
     setCustomTopic("");
     setTopics([]);
     setSelectedTopic(null);
@@ -867,7 +869,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                   ].map(opt => {
                     const active = topicMode === opt.key;
                     return (
-                      <div key={opt.key} onClick={() => setTopicMode(opt.key)} style={{
+                      <div key={opt.key} onClick={() => { setTopicMode(opt.key); setTopicArea(null); }} style={{
                         border: `2px solid ${active ? BLUE : BORDER}`,
                         borderRadius: "8px", padding: "16px 18px",
                         cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
@@ -885,6 +887,40 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
                     );
                   })}
                 </div>
+
+                {topicMode === "ai" && (
+                  <div style={{ animation: "fadeIn .2s ease" }}>
+                    <div style={{ fontSize: "12px", color: MID, marginBottom: "10px", fontWeight: "600" }}>
+                      Navrhni něco z této oblasti:
+                    </div>
+                    {[
+                      "Telekomunikace a optické sítě",
+                      "Řízení lidí",
+                      "Tvorba AI agentů",
+                    ].map(area => {
+                      const active = topicArea === area;
+                      return (
+                        <div key={area} onClick={() => setTopicArea(area)} style={{
+                          border: `2px solid ${active ? BLUE : BORDER}`,
+                          borderRadius: "8px", padding: "12px 16px", marginBottom: "8px",
+                          cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
+                          transition: "all .15s", display: "flex", alignItems: "center", gap: "10px",
+                        }}>
+                          <div style={{
+                            width: "16px", height: "16px", borderRadius: "50%", flexShrink: 0,
+                            background: active ? BLUE : WHITE,
+                            border: `2px solid ${active ? BLUE : BORDER}`,
+                            transition: "all .15s",
+                          }} />
+                          <span style={{ fontSize: "13px", fontWeight: active ? "700" : "500",
+                            color: active ? BLUE : DARK }}>
+                            {area}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {topicMode === "custom" && (
                   <div style={{ animation: "fadeIn .2s ease" }}>
