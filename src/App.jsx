@@ -247,7 +247,7 @@ export default function LinkedInPostGenerator() {
   const [expandedArchiveId, setExpandedArchiveId] = useState(null);
 
   const profile = PROFILES.find(p => p.id === selectedProfileId) || null;
-  const step2Valid = (topicMode === "ai" && topicArea !== null) || (topicMode === "custom" && customTopic.trim().length > 0);
+  const step2Valid = (topicMode === "ai" && topicArea && topicArea.trim().length > 0) || (topicMode === "custom" && customTopic.trim().length > 0);
 
   // === PŘIHLÁŠENÍ ===
   const handleLogin = async () => {
@@ -890,35 +890,22 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
 
                 {topicMode === "ai" && (
                   <div style={{ animation: "fadeIn .2s ease" }}>
-                    <div style={{ fontSize: "12px", color: MID, marginBottom: "10px", fontWeight: "600" }}>
-                      Navrhni něco z této oblasti:
-                    </div>
-                    {[
-                      "Telekomunikace a optické sítě",
-                      "Řízení lidí",
-                      "Tvorba AI agentů",
-                    ].map(area => {
-                      const active = topicArea === area;
-                      return (
-                        <div key={area} onClick={() => setTopicArea(area)} style={{
-                          border: `2px solid ${active ? BLUE : BORDER}`,
-                          borderRadius: "8px", padding: "12px 16px", marginBottom: "8px",
-                          cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
-                          transition: "all .15s", display: "flex", alignItems: "center", gap: "10px",
-                        }}>
-                          <div style={{
-                            width: "16px", height: "16px", borderRadius: "50%", flexShrink: 0,
-                            background: active ? BLUE : WHITE,
-                            border: `2px solid ${active ? BLUE : BORDER}`,
-                            transition: "all .15s",
-                          }} />
-                          <span style={{ fontSize: "13px", fontWeight: active ? "700" : "500",
-                            color: active ? BLUE : DARK }}>
-                            {area}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    <textarea
+                      value={topicArea || ""}
+                      onChange={e => setTopicArea(e.target.value || null)}
+                      placeholder={`Navrhni něco z této oblasti:\n• Telekomunikace a optické sítě\n• Řízení lidí\n• Tvorba AI agentů`}
+                      rows={5}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        border: `1.5px solid ${BORDER}`, borderRadius: "6px",
+                        padding: "12px 14px", fontSize: "14px", fontFamily: FONT,
+                        lineHeight: "1.7", resize: "vertical", outline: "none",
+                        color: DARK, background: "#FAFBFD",
+                      }}
+                      onFocus={e => e.target.style.borderColor = BLUE}
+                      onBlur={e => e.target.style.borderColor = BORDER}
+                      autoFocus
+                    />
                   </div>
                 )}
 
