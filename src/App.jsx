@@ -211,6 +211,7 @@ export default function LinkedInPostGenerator() {
   // Krok 2 – kontext
   const [language, setLanguage] = useState("cs");
   const [tone, setTone] = useState("insightful");
+  const [postLength, setPostLength] = useState("medium"); // "short" | "medium" | "long"
   const [topicMode, setTopicMode] = useState(null);
   const [customTopic, setCustomTopic] = useState("");
 
@@ -358,7 +359,8 @@ Tón: ${toneMap[tone] || tone}
 ${styleSection}
 ${topicDesc}
 
-Pravidla: první věta okamžitě zaujme, žádné korporátní fráze, přirozené odstavce, výzva k akci nebo otázka na konci, 3-5 hashtagů, 150-300 slov.
+Pravidla: první věta okamžitě zaujme, žádné korporátní fráze, přirozené odstavce, výzva k akci nebo otázka na konci, 3-5 hashtagů.
+Délka: příspěvek musí mít maximálně ${{ short: 450, medium: 1200, long: 2300 }[postLength]} znaků včetně mezer.
 Vrať POUZE text příspěvku.`;
 
     try {
@@ -528,6 +530,7 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
     setLoginPassword("");
     setLoginError("");
     setSelectedProfileId("");
+    setPostLength("medium");
     setTopicMode(null);
     setCustomTopic("");
     setTopics([]);
@@ -795,7 +798,67 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
               </Card>
 
               <Card>
-                <SectionLabel num={2} text="Nápad" />
+                <SectionLabel num={2} text="Délka" />
+                {(() => {
+                  const opts = [
+                    { key: "short",  label: "Krátký",  chars: "450 znaků" },
+                    { key: "medium", label: "Střední",  chars: "1 200 znaků" },
+                    { key: "long",   label: "Dlouhý",  chars: "2 300 znaků" },
+                  ];
+                  return (
+                    <div style={{ padding: "8px 16px 4px" }}>
+                      {/* Osa */}
+                      <div style={{ position: "relative", display: "flex",
+                        justifyContent: "space-between", alignItems: "center" }}>
+                        {/* Linka */}
+                        <div style={{
+                          position: "absolute", top: "50%", left: "0", right: "0",
+                          height: "2px", background: BORDER, transform: "translateY(-50%)",
+                          zIndex: 0,
+                        }} />
+                        {opts.map(opt => {
+                          const active = postLength === opt.key;
+                          return (
+                            <div key={opt.key}
+                              onClick={() => setPostLength(opt.key)}
+                              style={{ display: "flex", flexDirection: "column",
+                                alignItems: "center", gap: "10px", cursor: "pointer",
+                                zIndex: 1, userSelect: "none" }}>
+                              {/* Label nad bodem */}
+                              <div style={{
+                                fontSize: "13px", fontWeight: active ? "800" : "600",
+                                color: active ? BLUE : MID,
+                                transition: "color .15s",
+                              }}>
+                                {opt.label}
+                              </div>
+                              {/* Bod */}
+                              <div style={{
+                                width: "18px", height: "18px", borderRadius: "50%",
+                                background: active ? BLUE : WHITE,
+                                border: `2px solid ${active ? BLUE : BORDER}`,
+                                transition: "all .15s",
+                                boxShadow: active ? `0 0 0 3px ${BLUE}22` : "none",
+                              }} />
+                              {/* Počet znaků pod bodem */}
+                              <div style={{
+                                fontSize: "11px", color: active ? BLUE : MID,
+                                fontWeight: active ? "700" : "400",
+                                transition: "color .15s",
+                              }}>
+                                {opt.chars}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </Card>
+
+              <Card>
+                <SectionLabel num={3} text="Nápad" />
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px",
                   marginBottom: topicMode ? "20px" : "0" }}>
                   {[
