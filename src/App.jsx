@@ -23,6 +23,7 @@ const PROFILES = [
   { id: "petr",   name: "Petr Kabilka",     role: "Sales, PLP Czech Republic",      styleExamples: "" },
   { id: "pavel",  name: "Pavel Schuster",   role: "Sales, PLP Czech Republic",      styleExamples: "" },
   { id: "karel",  name: "Karel Pospíšilík", role: "Marketing, PLP Czech Republic",  styleExamples: "" },
+  { id: "jiri",   name: "Jiří Vysloužil",   role: "Sales, Micos Telcom",            styleExamples: "" },
 ];
 
 // === ARCHIV – Firestore helpers ===

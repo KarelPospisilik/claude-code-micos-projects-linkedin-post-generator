@@ -9,7 +9,7 @@ export default function handler(req, res) {
     return res.status(400).json({ ok: false, error: "Zadej email a heslo." });
   }
 
-  const profileIds = ["michal", "petr", "pavel", "karel"];
+  const profileIds = ["michal", "petr", "pavel", "karel", "jiri"];
   for (const profileId of profileIds) {
     const entry = process.env[`AUTH_${profileId}`];
     if (!entry) continue;
