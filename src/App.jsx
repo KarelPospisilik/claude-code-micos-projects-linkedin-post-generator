@@ -229,7 +229,7 @@ export default function LinkedInPostGenerator() {
   const [sendStatus, setSendStatus] = useState(null);
 
   // Krok 5 – obrázek
-  const [imageMode, setImageMode] = useState("ai"); // "ai" | "upload"
+  const [imageMode, setImageMode] = useState("upload"); // "ai" | "upload"
   const [imagePrompt, setImagePrompt] = useState("");
   const [imageOptions, setImageOptions] = useState([]);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
@@ -1053,30 +1053,39 @@ Vrať POUZE upravený text příspěvku, nic jiného.`;
 
                 {/* Přepínač AI / Vlastní */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
-                  {[
-                    { key: "ai",     label: "🤖 Vygenerovat AI obrázek" },
-                    { key: "upload", label: "📁 Nahrát vlastní obrázek" },
-                  ].map(opt => {
-                    const active = imageMode === opt.key;
-                    return (
-                      <div key={opt.key} onClick={() => {
-                        setImageMode(opt.key);
-                        setSelectedImageUrl("");
-                        setUploadError("");
-                        setImageError("");
-                      }} style={{
-                        border: `2px solid ${active ? BLUE : BORDER}`,
-                        borderRadius: "8px", padding: "12px 16px",
-                        cursor: "pointer", background: active ? "#EEF3FF" : WHITE,
-                        transition: "all .15s", textAlign: "center",
-                        fontWeight: "700", fontSize: "13px",
-                        color: active ? BLUE : MID,
-                        letterSpacing: "0.5px",
-                      }}>
-                        {opt.label}
-                      </div>
-                    );
-                  })}
+                  {/* AI obrázek – dočasně nedostupné */}
+                  <div style={{
+                    border: `2px solid ${BORDER}`,
+                    borderRadius: "8px", padding: "12px 16px",
+                    cursor: "not-allowed", background: "#F3F4F6",
+                    textAlign: "center", fontWeight: "700", fontSize: "13px",
+                    color: "#B0B8C8", letterSpacing: "0.5px",
+                    userSelect: "none",
+                  }}>
+                    🤖 Vygenerovat AI obrázek
+                    <div style={{ fontSize: "10px", fontWeight: "600", marginTop: "4px",
+                      letterSpacing: "0.5px", textTransform: "uppercase", color: "#B0B8C8" }}>
+                      Dočasně nedostupné
+                    </div>
+                  </div>
+
+                  {/* Vlastní obrázek */}
+                  <div onClick={() => {
+                    setImageMode("upload");
+                    setSelectedImageUrl("");
+                    setUploadError("");
+                    setImageError("");
+                  }} style={{
+                    border: `2px solid ${imageMode === "upload" ? BLUE : BORDER}`,
+                    borderRadius: "8px", padding: "12px 16px",
+                    cursor: "pointer", background: imageMode === "upload" ? "#EEF3FF" : WHITE,
+                    transition: "all .15s", textAlign: "center",
+                    fontWeight: "700", fontSize: "13px",
+                    color: imageMode === "upload" ? BLUE : MID,
+                    letterSpacing: "0.5px",
+                  }}>
+                    📁 Nahrát vlastní obrázek
+                  </div>
                 </div>
 
                 {/* === AI GENEROVÁNÍ === */}
